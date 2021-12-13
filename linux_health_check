@@ -1,0 +1,199 @@
+---
+- name: Check all port
+  wait_for:
+    host: "{{ inventory_hostname }}"
+    port: 22
+    delay: 2
+    timeout: 3
+  ignore_errors: yes
+  register: port_out
+  delegate_to: localhost
+
+
+####################################################################
+- name: Create file if does not exist
+  file:
+    path: "/root/linux_health/reports/input.txt"
+    state: touch
+  register: create_file
+  ignore_errors: yes
+
+- name: port status
+  set_fact:
+    var_port: Server port is {{ port_out.port }}
+
+
+- name: line insert
+  lineinfile:
+    path: "/root/linux_health/reports/input.txt"
+    line: '{{ var_port }}'
+
+
+
+##################################################################
+#- setup:
+#    gather_subset: '!all'
+#  register: facts
+#  ignore_errors: yes
+#  ignore_unreachable: yes
+#  when: port_out is success
+
+#- name: Port Success Status
+#  debug:
+#    msg: "{{facts}}"
+
+- name: Port Failed Status
+  fail:
+    msg: "Port 22 is not Reachable"
+  when: port_out is failed
+# tags: port_check
+
+- name: Port Success Status
+  debug:
+    msg: "Port 22 is Reachable"
+  when: port_out is success
+# tags: port_check
+
+- name: value of ansible_os_family
+  debug:
+    msg:
+      - "{{ansible_os_family}}"
+      - "{{ansible_distribution}}"
+
+- name: OS Flavor Check
+  fail:
+    msg: "OS VERSION NOT COMPATIBLE"
+  ignore_errors: yes
+  when: ansible_os_family != "RedHat" and ansible_distribution != "Amazon"
+
+# tags: unittest
+
+- name: Print output
+  debug:
+    msg: "OS Compatibility Check Completed "
+  when: ansible_distribution == "Amazon" and ansible_os_family == "RedHat"
+# tags: unittest
+
+- name: Find Servername
+  set_fact:
+    var_Sname: Host name is  "{{ ansible_hostname }}"
+  tags: health_check
+  ############################################################
+- name: line insert
+  lineinfile:
+    path: "/root/linux_health/reports/input.txt"
+    line: '{{ var_Sname }}'
+
+- name: Check Print Servername
+  debug:
+    msg: "{{ var_Sname }}"
+# tags: health_check
+
+- name: Setting variable ping_status
+  set_fact:
+    ping_status: DOWN
+# tags: health_check
+
+- name: Linux Ping Check
+  ping:
+    data: success
+  register: ping_out
+#########################################################
+- name: Linux Ping Check set fact
+  set_fact:
+    var_ping: Linux Ping Check is {{ ping_out.ping }}
+
+
+- name: line insert
+  lineinfile:
+    path: "/root/linux_health/reports/input.txt"
+    line: '{{ var_ping }}'
+
+- name: debug ping
+  debug:
+    msg: "{{ ping_out.ping }}"
+
+- name: If ping status is UP
+  set_fact:
+    ping_status: UP
+  when: ping_out is success
+
+- name: CPU Utilization
+  shell: "vmstat | grep -v procs | grep -v swpd | awk '{print $15}'"
+  register: CPU_out
+
+- name: debug CPU Stat
+  debug:
+    msg: "{{ CPU_out.stdout }}"
+
+- name: CPU util status
+  set_fact:
+    var_cpu: Server is {{ CPU_out.stdout }}% idle
+
+###################################################
+- name: line insert
+  lineinfile:
+    path: "/root/linux_health/reports/input.txt"
+    line: '{{ var_cpu }}'
+
+- name: debug CPU Stat
+  debug:
+    msg: "{{ var_cpu }}"
+
+- name: Swap Utilization
+#  shell: "free | grep Swap | awk '{print $3/$2 * 100}'"
+  shell: "free | grep Swap | awk '{print $4}'"
+  register: swap_out
+  ignore_errors: yes
+
+- name: debug swap Stat
+  debug:
+    msg: "{{ swap_out }}"
+
+- name: debug swap Stat
+  debug:
+    msg: "{{ swap_out.rc }},{{swap_out.stdout}}"
+
+- name: Swap Util
+  set_fact:
+    var_swap: Swap is 0 utilized
+  ignore_errors: yes
+  when: (swap_out is success) and (swap_out.stdout == 0)
+###################################################
+- name: line insert
+  lineinfile:
+    path: "/root/linux_health/reports/input.txt"
+    line: '{{ var_swap }}'
+  when: (swap_out is success) and (swap_out.stdout == 0)
+
+- name: Swap status
+  set_fact:
+    var_swap: Swap is {{ swap_out.stdout }} utilized
+  ignore_errors: yes
+  when: (swap_out is success) and (swap_out.stdout > 0)
+###################################################
+- name: line insert
+  lineinfile:
+    path: "/root/linux_health/reports/input.txt"
+    line: '{{ var_swap }}'
+  when: (swap_out is success) and (swap_out.stdout > 0)
+
+- name: Disk util
+  shell: "df -P | awk '0+$5 >= 30 {print $1,$5}'"
+  register: disk_out
+
+- name: debug for disk
+  debug:
+    msg: "{{ disk_out }}"
+
+- name: Disk debug
+  set_fact:
+    var_disk: Disk is Healthy
+  when: disk_out.stdout == ""
+
+###############################################
+- name: line insert
+  lineinfile:
+    path: "/root/linux_health/reports/input.txt"
+    line: '{{ var_disk }}'
+  when: disk_out.stdout == ""
